@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: bc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: backend_challenge
+      POSTGRES_PASSWORD: backend_challenge
+      POSTGRES_DB: backend_challenge
+    ports:
+      - "5432:5432"
+    volumes:
+      - backend_challenge_pgdata:/var/lib/postgresql/data
+
+volumes:
+  backend_challenge_pgdata:
