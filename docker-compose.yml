@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: backend_challenge
       POSTGRES_DB: backend_challenge
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - backend_challenge_pgdata:/var/lib/postgresql/data
 
