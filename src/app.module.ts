@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './shared/prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
 import { PostsModule } from './modules/posts/posts.module';
+import { interactionsModule } from './modules/interactions/interactions.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PostsModule } from './modules/posts/posts.module';
     PrismaModule,
     HealthModule,
     PostsModule,
+    interactionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
