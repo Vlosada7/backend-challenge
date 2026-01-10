@@ -44,3 +44,30 @@ model PostLike {
   @@index([postId])
   @@index([userId])
 }
+
+enum OutboxEventType {
+  POST_LIKED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model NotificationOutbox {
+  id          String         @id @default(cuid())
+  type        OutboxEventType
+  status      OutboxStatus   @default(PENDING)
+
+  payload     Json
+
+  attempts    Int            @default(0)
+  lastError   String?
+  createdAt   DateTime       @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+}
+
