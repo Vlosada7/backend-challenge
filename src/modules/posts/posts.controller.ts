@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { XUserIdGuard } from '../../shared/auth/x-user-id.guard';
+import { UserId } from '../../shared/auth/user-id.decorator';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostResponseDto } from './dto/post-response.dto';
 import { PostsService } from './posts.service';
@@ -8,8 +10,12 @@ export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Post()
-  async createPost(@Body() body: CreatePostDto): Promise<PostResponseDto> {
-    return this.postsService.create(body);
+  @UseGuards(XUserIdGuard)
+  async createPost(
+    @Body() body: CreatePostDto,
+    @UserId() userId: string,
+  ): Promise<PostResponseDto> {
+    return this.postsService.create(body, userId);
   }
 
   @Get()

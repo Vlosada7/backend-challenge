@@ -7,16 +7,18 @@ import { PostResponseDto } from './dto/post-response.dto';
 export class PostsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreatePostDto): Promise<PostResponseDto> {
+  async create(dto: CreatePostDto, authorId: string): Promise<PostResponseDto> {
     const post = await this.prisma.post.create({
       data: {
         content: dto.content,
+        authorId,
       },
     });
 
     return {
       id: post.id,
       content: post.content,
+      authorId: post.authorId,
       likesCount: post.likesCount,
       commentsCount: post.commentsCount,
       viewsCount: post.viewsCount,
@@ -34,6 +36,7 @@ export class PostsService {
     return posts.map((post) => ({
       id: post.id,
       content: post.content,
+      authorId: post.authorId,
       likesCount: post.likesCount,
       commentsCount: post.commentsCount,
       viewsCount: post.viewsCount,
@@ -55,6 +58,7 @@ export class PostsService {
     return {
       id: post.id,
       content: post.content,
+      authorId: post.authorId,
       likesCount: post.likesCount,
       commentsCount: post.commentsCount,
       viewsCount: post.viewsCount,

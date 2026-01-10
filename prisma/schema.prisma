@@ -16,6 +16,8 @@ model Post {
   id            String   @id @default(cuid())
   content       String
 
+  authorId      String   @default("unknown")
+
   likesCount    Int      @default(0)
   commentsCount Int      @default(0)
   viewsCount    Int      @default(0)
@@ -27,6 +29,7 @@ model Post {
   likes         PostLike[]
 
   @@index([createdAt])
+  @@index([authorId])
 }
 
 model PostLike {

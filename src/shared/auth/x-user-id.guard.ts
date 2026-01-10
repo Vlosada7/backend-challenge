@@ -14,7 +14,7 @@ export class XUserIdGuard implements CanActivate {
     const headerValue = request.header('x-user-id');
 
     if (!headerValue || headerValue.trim().length === 0) {
-      throw new UnauthorizedException('x-user.id header is required');
+      throw new UnauthorizedException('x-user-id header is required');
     }
 
     request.userId = headerValue.trim();
