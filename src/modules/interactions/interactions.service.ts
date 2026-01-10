@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  OutboxEventType,
+  Prisma,
+  Prisma as PrismaNamespace,
+} from '@prisma/client';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { LikePostResponseDto } from './dto/like-post-response.dto';
 
@@ -8,35 +12,52 @@ export class InteractionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async likePost(postId: string, userId: string): Promise<LikePostResponseDto> {
-    const postExists = await this.prisma.post.findUnique({
-      where: { id: postId },
-      select: { id: true },
-    });
-
-    if (!postExists) {
-      throw new NotFoundException('Post not found');
-    }
-
     try {
-      const result = await this.prisma.$transaction([
-        this.prisma.postLike.create({
-          data: { postId, userId },
-          select: { id: true },
-        }),
-        this.prisma.post.update({
-          where: { id: postId },
-          data: { likesCount: { increment: 1 } },
-          select: { likesCount: true },
-        }),
-      ] as const);
+      const likesCount = await this.prisma.$transaction(
+        async (tx: PrismaNamespace.TransactionClient) => {
+          const post = await tx.post.findUnique({
+            where: { id: postId },
+            select: { id: true, authorId: true },
+          });
 
-      const updatedPost = result[1];
+          if (!post) {
+            throw new NotFoundException('Post not found');
+          }
+
+          await tx.postLike.create({
+            data: { postId, userId },
+            select: { id: true },
+          });
+
+          const updatedPost = await tx.post.update({
+            where: { id: postId },
+            data: { likesCount: { increment: 1 } },
+            select: { likesCount: true },
+          });
+
+          if (post.authorId !== userId) {
+            await tx.notificationOutbox.create({
+              data: {
+                type: OutboxEventType.POST_LIKED,
+                payload: {
+                  postId,
+                  actorUserId: userId,
+                  recipientUserId: post.authorId,
+                } satisfies Prisma.JsonObject,
+              },
+              select: { id: true },
+            });
+          }
+
+          return updatedPost.likesCount;
+        },
+      );
 
       return {
         postId,
         userId,
         duplicated: false,
-        likesCount: updatedPost.likesCount,
+        likesCount,
       };
     } catch (error: unknown) {
       if (
