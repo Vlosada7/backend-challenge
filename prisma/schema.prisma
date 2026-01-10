@@ -16,6 +16,8 @@ model Post {
   id            String   @id @default(cuid())
   content       String
 
+  authorId      String   @default("unknown")
+
   likesCount    Int      @default(0)
   commentsCount Int      @default(0)
   viewsCount    Int      @default(0)
@@ -24,5 +26,48 @@ model Post {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  likes         PostLike[]
+
   @@index([createdAt])
+  @@index([authorId])
 }
+
+model PostLike {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId], name: "uniq_post_like")
+  @@index([postId])
+  @@index([userId])
+}
+
+enum OutboxEventType {
+  POST_LIKED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model NotificationOutbox {
+  id          String         @id @default(cuid())
+  type        OutboxEventType
+  status      OutboxStatus   @default(PENDING)
+
+  payload     Json
+
+  attempts    Int            @default(0)
+  lastError   String?
+  createdAt   DateTime       @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+}
+
