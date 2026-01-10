@@ -1,98 +1,219 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Debook — Backend Coding Challenge (NestJS + PostgreSQL)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This repository implements a **social interaction flow** (Like on a Post) with:
+- **Idempotent interaction** (same user can’t like the same post twice)
+- **Efficient counters** stored on the Post (no loading of relations to compute counts)
+- **Async notification flow** using the **Outbox Pattern** (DB-backed queue + polling processor)
+- **Unit tests for core services:**
+  - `InteractionsService` (like idempotente + outbox)
+  - `PostsService` (create / getAll / findById)
+- **E2E test** for the interaction endpoint (`POST /posts/:id/like`)
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## Tech Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **NestJS** + **TypeScript**
+- **PostgreSQL**
+- **Prisma** (chosen as an equivalent alternative to TypeORM)
+- **Jest** + **Supertest** for tests
 
-## Project setup
+### Why Prisma (instead of TypeORM)?
+Prisma provides:
+- Strong **type-safety** and a generated client
+- First-class **migrations** workflow
+- Clear, explicit queries and good developer experience
+- Easy to implement **atomic counter updates** and enforce **DB constraints**
+
+---
+
+## Features Implemented
+
+### Posts
+- `POST /posts` — create a post (requires `x-user-id`)
+- `GET /posts` — list posts (returns counters)
+- `GET /posts/:id` — get post by id (returns counters)
+
+### Interactions (Likes)
+- `POST /posts/:id/like` — like a post (requires `x-user-id`)
+  - **Idempotent**: if the user already liked, it returns `duplicated: true` and does **not** increment again
+  - Updates `likesCount` using `increment: 1` (efficient)
+
+### Async Notifications (Outbox)
+When a like happens (and the liker is not the author), an outbox event is written **in the same DB transaction**:
+- `NotificationOutbox` row with `type = POST_LIKED` and a JSON payload
+
+A polling service (`OutboxProcessorService`) runs every 2 seconds and:
+- reads `PENDING` events
+- marks them as `PROCESSING`
+- “handles” them (currently logs)
+- marks them as `PROCESSED`
+- retries failures up to `maxAttempts`
+
+This demonstrates an async pipeline without external infra (Redis/Kafka), while keeping consistency.
+
+---
+
+## Database Design / Constraints
+
+### Avoiding duplicate likes
+The table `PostLike` has a unique constraint:
+- `@@unique([postId, userId], name: "uniq_post_like")`
+
+So the DB guarantees “one like per user per post”.
+In the service, a duplicate like becomes an **idempotent success** by catching `P2002`.
+
+### Efficient counters
+Counters (`likesCount`, etc.) are stored on `Post` and updated with atomic increments:
+- `data: { likesCount: { increment: 1 } }`
+
+This avoids loading/aggregating relations to compute counts.
+
+---
+
+## Running Locally
+
+### 1) Start Postgres with Docker
 
 ```bash
-$ npm install
+docker compose up -d
 ```
 
-## Compile and run the project
+This project uses **port 5433** by default to avoid conflicts with local Postgres.
+
+### 2) Configure environment variables
+
+Copy `.env.example` to `.env`:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+cp .env.example .env
 ```
 
-## Run tests
+### 3) Install dependencies
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm install
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 4) Run migrations
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npx prisma migrate dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+(Optional) Open Prisma Studio:
 
-## Resources
+```bash
+npx prisma studio
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+### 5) Start the API
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+npm run start:dev
+```
 
-## Support
+### 6) Health check
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+curl http://localhost:3000/health
+```
 
-## Stay in touch
+Expected:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```json
+{"status":"ok"}
+```
 
-## License
+---
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Endpoints (Quick Reference)
+
+### Create Post
+```http
+POST /posts
+x-user-id: <author_id>
+Content-Type: application/json
+
+{ "content": "Hello Debook!" }
+```
+
+### List Posts
+```http
+GET /posts
+```
+
+### Get Post by Id (with counters)
+```http
+GET /posts/:id
+```
+
+### Like Post (idempotent)
+```http
+POST /posts/:id/like
+x-user-id: <user_id>
+```
+
+Response example (first like):
+```json
+{
+  "postId": "post_123",
+  "userId": "user_abc",
+  "duplicated": false,
+  "likesCount": 1
+}
+```
+
+Response example (duplicate like):
+```json
+{
+  "postId": "post_123",
+  "userId": "user_abc",
+  "duplicated": true,
+  "likesCount": 1
+}
+```
+
+---
+
+## Tests
+
+### Unit tests
+```bash
+npm run test
+```
+
+### E2E tests
+```bash
+npm run test:e2e
+```
+
+> Note: The E2E interaction test cleans up the DB using `deleteMany()` after each run.
+
+---
+
+## Scripts
+
+Typical scripts used in this repository:
+- `npm run start`
+- `npm run start:dev`
+- `npm run test`
+- `npm run test:e2e`
+- `npm run lint`
+
+---
+
+## Notes / Trade-offs
+
+- The outbox processor currently “delivers” notifications by logging; in a real system it would push to a queue, send a websocket event, call a notification service, etc.
+- The Outbox Pattern is used to guarantee **consistency**: if the like is committed, the outbox event is committed too.
+- Polling with `@Interval` is simple and sufficient for this challenge; production systems typically add leader election / distributed locks, or move to a dedicated queue.
+
+---
+
+## Repository Contents (Important)
+
+- Prisma migrations **are committed** under `prisma/migrations/**`
+- `migration_lock.toml` **is committed**
+- `.env.example` is included to simplify setup
+- `docker-compose.yml` is included for local Postgres
